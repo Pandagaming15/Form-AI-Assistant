@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile and answering preferences",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "email": { "type": "string", "description": "User email address" },
+        "photoUrl": { "type": "string", "description": "Profile picture URL" },
+        "schoolOrOrg": { "type": "string", "description": "School, university or company name" },
+        "department": { "type": "string", "description": "Department, major or course name" },
+        "preferredTone": { "type": "string", "description": "Writing style e.g. formal, natural, concise" },
+        "preferredLanguage": { "type": "string", "description": "Preferred language for answers e.g. English, Filipino" },
+        "notes": { "type": "string", "description": "User specific personal context and instructions" },
+        "memoryEnabled": { "type": "boolean", "description": "Whether to auto-apply user profile context to form answers" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "displayName", "email", "memoryEnabled", "createdAt", "updatedAt"]
+    },
+    "FormSession": {
+      "title": "FormSession",
+      "description": "Saved Google Form assistant session and draft metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Session ID" },
+        "userId": { "type": "string", "description": "Owner user UID" },
+        "formUrl": { "type": "string", "description": "Google Forms URL" },
+        "formTitle": { "type": "string", "description": "Title of the form" },
+        "detectedQuestionsCount": { "type": "integer", "description": "Total detected questions" },
+        "completedQuestionsCount": { "type": "integer", "description": "Total completed questions" },
+        "status": { "type": "string", "enum": ["draft", "review", "completed"], "description": "Session status" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["id", "userId", "formUrl", "formTitle", "detectedQuestionsCount", "completedQuestionsCount", "status", "createdAt", "updatedAt"]
+    },
+    "FormQuestion": {
+      "title": "FormQuestion",
+      "description": "Individual question detected in a form session and its AI suggested answer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Question ID" },
+        "formId": { "type": "string", "description": "Parent form session ID" },
+        "questionIndex": { "type": "integer", "description": "Order of the question in the form" },
+        "questionText": { "type": "string", "description": "Question prompt text" },
+        "questionType": { "type": "string", "description": "Type of field e.g. short_answer, paragraph, multiple_choice, checkboxes" },
+        "isRequired": { "type": "boolean", "description": "Whether the question is mandatory" },
+        "options": { "type": "array", "description": "Available answer choices for multiple choice / checkboxes" },
+        "suggestedAnswer": { "type": "string", "description": "AI generated or user edited answer text" },
+        "selectedChoices": { "type": "array", "description": "Selected option labels for choice questions" },
+        "isLocked": { "type": "boolean", "description": "Lock answer against regeneration" },
+        "isVerified": { "type": "boolean", "description": "Marked verified by user" },
+        "confidence": { "type": "string", "description": "AI confidence level" },
+        "reasoning": { "type": "string", "description": "Brief explanation or citation" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["id", "formId", "questionIndex", "questionText", "questionType", "isRequired", "isLocked", "isVerified", "updatedAt"]
+    },
+    "AnswerTemplate": {
+      "title": "AnswerTemplate",
+      "description": "Reusable answer template in the user library",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Template ID" },
+        "userId": { "type": "string", "description": "Owner user UID" },
+        "title": { "type": "string", "description": "Template title" },
+        "category": { "type": "string", "description": "Template category e.g. Education, Work, Bio" },
+        "content": { "type": "string", "description": "Template response text" },
+        "tags": { "type": "array", "description": "Keywords for template lookup" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["id", "userId", "title", "category", "content", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile settings and memory options"
+    },
+    "/users/{userId}/forms/{formId}": {
+      "schema": { "$ref": "#/entities/FormSession" },
+      "description": "User form drafts and history"
+    },
+    "/users/{userId}/forms/{formId}/questions/{questionId}": {
+      "schema": { "$ref": "#/entities/FormQuestion" },
+      "description": "Form questions and AI answers"
+    },
+    "/users/{userId}/templates/{templateId}": {
+      "schema": { "$ref": "#/entities/AnswerTemplate" },
+      "description": "User reusable answer library"
+    }
+  }
+}

@@ -1,0 +1,185 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Hardened Helper Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 1. UserProfile Validation
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 150 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+             (!('photoUrl' in data) || data.photoUrl == null || (data.photoUrl is string && data.photoUrl.size() <= 1000)) &&
+             (!('schoolOrOrg' in data) || data.schoolOrOrg == null || (data.schoolOrOrg is string && data.schoolOrOrg.size() <= 200)) &&
+             (!('department' in data) || data.department == null || (data.department is string && data.department.size() <= 200)) &&
+             (!('preferredTone' in data) || data.preferredTone == null || (data.preferredTone is string && data.preferredTone.size() <= 50)) &&
+             (!('preferredLanguage' in data) || data.preferredLanguage == null || (data.preferredLanguage is string && data.preferredLanguage.size() <= 50)) &&
+             (!('notes' in data) || data.notes == null || (data.notes is string && data.notes.size() <= 2000)) &&
+             data.memoryEnabled is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 2. FormSession Validation
+    function isValidFormSession(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.formUrl is string && data.formUrl.size() >= 10 && data.formUrl.size() <= 2000 &&
+             data.formTitle is string && data.formTitle.size() <= 300 &&
+             data.detectedQuestionsCount is int && data.detectedQuestionsCount >= 0 && data.detectedQuestionsCount <= 500 &&
+             data.completedQuestionsCount is int && data.completedQuestionsCount >= 0 && data.completedQuestionsCount <= 500 &&
+             data.status in ['draft', 'review', 'completed'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 3. FormQuestion Validation
+    function isValidFormQuestion(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.formId is string && data.formId.size() <= 128 &&
+             data.questionIndex is int && data.questionIndex >= 0 && data.questionIndex <= 500 &&
+             data.questionText is string && data.questionText.size() <= 2000 &&
+             data.questionType is string && data.questionType.size() <= 50 &&
+             data.isRequired is bool &&
+             (!('options' in data) || data.options == null || data.options is list) &&
+             (!('suggestedAnswer' in data) || data.suggestedAnswer == null || (data.suggestedAnswer is string && data.suggestedAnswer.size() <= 10000)) &&
+             (!('selectedChoices' in data) || data.selectedChoices == null || data.selectedChoices is list) &&
+             data.isLocked is bool &&
+             data.isVerified is bool &&
+             (!('confidence' in data) || data.confidence == null || (data.confidence is string && data.confidence.size() <= 50)) &&
+             (!('reasoning' in data) || data.reasoning == null || (data.reasoning is string && data.reasoning.size() <= 2000)) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 4. AnswerTemplate Validation
+    function isValidAnswerTemplate(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
+             data.content is string && data.content.size() <= 10000 &&
+             (!('tags' in data) || data.tags == null || (data.tags is list && data.tags.size() <= 20)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // User Profile Rules
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) && isValidId(userId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().createdAt is timestamp &&
+                       incoming().createdAt <= request.time &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isOwner(userId) && isValidId(userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'photoUrl', 'schoolOrOrg', 'department',
+                         'preferredTone', 'preferredLanguage', 'notes', 'memoryEnabled', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // Form Sessions Subcollection
+      match /forms/{formId} {
+        allow get: if isOwner(userId) && isValidId(formId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) && isValidId(formId) &&
+                         incoming().id == formId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         isValidFormSession(incoming());
+
+        allow update: if isOwner(userId) && isValidId(formId) &&
+                         incoming().id == existing().id &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidFormSession(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'formUrl', 'formTitle', 'detectedQuestionsCount',
+                           'completedQuestionsCount', 'status', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(formId);
+
+        // Questions Subcollection
+        match /questions/{questionId} {
+          allow get: if isOwner(userId) && isValidId(questionId);
+          allow list: if isOwner(userId);
+
+          allow create: if isOwner(userId) && isValidId(questionId) &&
+                           incoming().id == questionId &&
+                           incoming().formId == formId &&
+                           isValidFormQuestion(incoming());
+
+          allow update: if isOwner(userId) && isValidId(questionId) &&
+                           incoming().id == existing().id &&
+                           incoming().formId == existing().formId &&
+                           isValidFormQuestion(incoming()) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'questionIndex', 'questionText', 'questionType', 'isRequired',
+                             'options', 'suggestedAnswer', 'selectedChoices', 'isLocked',
+                             'isVerified', 'confidence', 'reasoning', 'updatedAt'
+                           ]);
+
+          allow delete: if isOwner(userId) && isValidId(questionId);
+        }
+      }
+
+      // Reusable Answer Templates Subcollection
+      match /templates/{templateId} {
+        allow get: if isOwner(userId) && isValidId(templateId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) && isValidId(templateId) &&
+                         incoming().id == templateId &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         isValidAnswerTemplate(incoming());
+
+        allow update: if isOwner(userId) && isValidId(templateId) &&
+                         incoming().id == existing().id &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidAnswerTemplate(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'category', 'content', 'tags', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(templateId);
+      }
+    }
+  }
+}

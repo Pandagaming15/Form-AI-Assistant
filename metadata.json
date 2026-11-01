@@ -1,0 +1,6 @@
+{
+  "name": "FormPilot AI",
+  "description": "Smart Google Forms Assistant powered by Gemini AI with Google Sign-In, question recognition, and answer auto-fill.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
