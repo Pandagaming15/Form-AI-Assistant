@@ -22,27 +22,43 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Install Android SDK packages
+      - name: Accept Android SDK Licenses & Install Components
         run: |
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-36"
-          sdkmanager "build-tools;36.0.0"
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
 
-      - name: Restore debug keystore
+      - name: Prepare environment configuration
         run: |
+          if [ -f .env.example ]; then
+            cp -n .env.example .env || true
+          fi
+          touch .env
+
+      - name: Restore or generate debug keystore
+        run: |
+          KEYSTORE_VALID=false
           if [ -f debug.keystore.base64 ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-          else
+            base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || base64 --decode debug.keystore.base64 > debug.keystore 2>/dev/null || true
+            if [ -s debug.keystore ]; then
+              if keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey >/dev/null 2>&1; then
+                KEYSTORE_VALID=true
+                echo "Debug keystore restored successfully."
+              fi
+            fi
+          fi
+
+          if [ "$KEYSTORE_VALID" != "true" ]; then
+            echo "Generating fresh debug keystore..."
+            rm -f debug.keystore
             keytool -genkeypair \
               -v \
               -keystore debug.keystore \
@@ -56,7 +72,11 @@ jobs:
           fi
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Verify generated APK
+        run: |
+          ls -la app/build/outputs/apk/debug/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

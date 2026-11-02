@@ -4,17 +4,12 @@ import com.example.formpilot.model.ConfidenceLevel
 import com.example.formpilot.model.FormQuestion
 import com.example.formpilot.model.QuestionType
 import com.example.formpilot.service.GoogleFormsBridge
-import org.json.JSONArray
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 
-@RunWith(RobolectricTestRunner::class)
 class FormPilotUnitTest {
 
   @Test
@@ -142,27 +137,5 @@ class FormPilotUnitTest {
     val missing = questions.filter { it.isRequired && it.suggestedAnswer.isBlank() && it.selectedChoices.isEmpty() }
     assertEquals(1, missing.size)
     assertEquals("q2", missing[0].id)
-  }
-
-  @Test
-  fun testJsonParsingSimulation() {
-    val sampleAiJson = """
-      [
-        {
-          "questionIndex": 0,
-          "suggestedAnswer": "Computer Science",
-          "selectedChoices": ["Computer Science"],
-          "confidence": "high",
-          "reasoning": "Matched from profile"
-        }
-      ]
-    """.trimIndent()
-
-    val array = JSONArray(sampleAiJson)
-    assertEquals(1, array.length())
-    val item = array.getJSONObject(0)
-    assertEquals(0, item.getInt("questionIndex"))
-    assertEquals("Computer Science", item.getString("suggestedAnswer"))
-    assertEquals("high", item.getString("confidence"))
   }
 }

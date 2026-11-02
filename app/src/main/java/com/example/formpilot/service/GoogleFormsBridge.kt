@@ -139,22 +139,18 @@ class GoogleFormsBridge(
 
     // Generate auto-fill script for a given list of questions and answers
     fun buildFillScript(questions: List<FormQuestion>): String {
-      val jsonArray = JSONArray()
-      for (q in questions) {
-        val obj = JSONObject()
-        obj.put("index", q.questionIndex)
-        obj.put("text", q.questionText)
-        obj.put("type", q.questionType)
-        obj.put("answer", q.suggestedAnswer)
-        val choicesArr = JSONArray()
-        q.selectedChoices.forEach { choicesArr.put(it) }
-        obj.put("choices", choicesArr)
-        jsonArray.put(obj)
+      val questionsJson = questions.joinToString(separator = ",", prefix = "[", postfix = "]") { q ->
+        val choicesJson = q.selectedChoices.joinToString(separator = ",", prefix = "[", postfix = "]") { c ->
+          "\"" + c.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
+        }
+        val safeText = q.questionText.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+        val safeAnswer = q.suggestedAnswer.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+        """{"index":${q.questionIndex},"text":"$safeText","type":"${q.questionType}","answer":"$safeAnswer","choices":$choicesJson}"""
       }
 
       return """
         (function() {
-          var questionsToFill = ${jsonArray.toString()};
+          var questionsToFill = $questionsJson;
           var filled = 0;
           var missed = 0;
           var details = [];
