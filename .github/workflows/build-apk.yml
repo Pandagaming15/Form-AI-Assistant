@@ -25,16 +25,18 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
 
-      - name: Accept Android SDK Licenses & Install Components
+      - name: Accept Android SDK Licenses
         run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
+          cache-read-only: false
 
       - name: Prepare environment configuration
         run: |
@@ -45,19 +47,13 @@ jobs:
 
       - name: Restore or generate debug keystore
         run: |
-          KEYSTORE_VALID=false
           if [ -f debug.keystore.base64 ]; then
+            echo "Restoring debug.keystore from debug.keystore.base64..."
             base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || base64 --decode debug.keystore.base64 > debug.keystore 2>/dev/null || true
-            if [ -s debug.keystore ]; then
-              if keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey >/dev/null 2>&1; then
-                KEYSTORE_VALID=true
-                echo "Debug keystore restored successfully."
-              fi
-            fi
           fi
 
-          if [ "$KEYSTORE_VALID" != "true" ]; then
-            echo "Generating fresh debug keystore..."
+          if [ ! -s debug.keystore ] || ! keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey >/dev/null 2>&1; then
+            echo "Generating fallback debug.keystore..."
             rm -f debug.keystore
             keytool -genkeypair \
               -v \
@@ -71,8 +67,20 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
+          echo "Verifying debug.keystore:"
+          keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
+
+      - name: Make Gradle wrapper executable and link gradle command
+        run: |
+          chmod +x ./gradlew
+          if ! command -v gradle >/dev/null 2>&1; then
+            echo "Linking gradlew to /usr/local/bin/gradle..."
+            sudo ln -sf "$PWD/gradlew" /usr/local/bin/gradle || true
+          fi
+
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace --no-daemon
+        run: |
+          ./gradlew assembleDebug --stacktrace --no-daemon -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m" -Dorg.gradle.workers.max=2
 
       - name: Verify generated APK
         run: |
