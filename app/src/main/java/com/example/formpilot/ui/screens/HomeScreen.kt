@@ -81,6 +81,7 @@ fun HomeScreen(
   val formUrl by viewModel.formUrl.collectAsState()
   val formTitle by viewModel.formTitle.collectAsState()
   val questions by viewModel.questions.collectAsState()
+  val pageState by viewModel.pageState.collectAsState()
   val selectedMode by viewModel.selectedMode.collectAsState()
   val userProfile by viewModel.userProfile.collectAsState()
   val localDrafts by viewModel.localDrafts.collectAsState()
@@ -173,7 +174,7 @@ fun HomeScreen(
                 overflow = TextOverflow.Ellipsis
               )
               Text(
-                text = "$answeredCount of $totalQuestions questions prepared",
+                text = "${pageState.pageIndicatorText} • $answeredCount of $totalQuestions questions prepared",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color(0xFF38BDF8)
               )

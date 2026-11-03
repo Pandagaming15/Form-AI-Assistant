@@ -33,10 +33,12 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
@@ -48,6 +50,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -63,7 +68,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,6 +94,10 @@ fun WorkspaceScreen(
   val formUrl by viewModel.formUrl.collectAsState()
   val formTitle by viewModel.formTitle.collectAsState()
   val questions by viewModel.questions.collectAsState()
+  val pageState by viewModel.pageState.collectAsState()
+  val autoAiOnPageChange by viewModel.autoAiOnPageChange.collectAsState()
+  val isNavigatingPage by viewModel.isNavigatingPage.collectAsState()
+  val pageNavigationMessage by viewModel.pageNavigationMessage.collectAsState()
   val isGenerating by viewModel.isGenerating.collectAsState()
   val generationError by viewModel.generationError.collectAsState()
   val fillReport by viewModel.fillReport.collectAsState()
@@ -103,6 +111,38 @@ fun WorkspaceScreen(
   var showConsistencyDialog by remember { mutableStateOf(false) }
 
   val tabs = listOf("1. Form Web View", "2. AI Answers", "3. Review & Fill")
+
+  fun handleNextPage() {
+    if (formUrl.contains("docs.google.com/forms") || formUrl.contains("forms.gle")) {
+      viewModel.startNavigating()
+      webViewRef?.evaluateJavascript(GoogleFormsBridge.NEXT_PAGE_SCRIPT, null)
+    } else {
+      viewModel.demoNextPage()
+    }
+  }
+
+  fun handlePrevPage() {
+    if (formUrl.contains("docs.google.com/forms") || formUrl.contains("forms.gle")) {
+      viewModel.startNavigating()
+      webViewRef?.evaluateJavascript(GoogleFormsBridge.PREV_PAGE_SCRIPT, null)
+    } else {
+      viewModel.demoPrevPage()
+    }
+  }
+
+  fun handleAutoFillAndNext() {
+    if (formUrl.contains("docs.google.com/forms") || formUrl.contains("forms.gle")) {
+      val script = GoogleFormsBridge.buildFillScript(questions)
+      viewModel.startNavigating()
+      webViewRef?.evaluateJavascript(script) {
+        webViewRef?.postDelayed({
+          webViewRef?.evaluateJavascript(GoogleFormsBridge.NEXT_PAGE_SCRIPT, null)
+        }, 400)
+      }
+    } else {
+      viewModel.demoNextPage()
+    }
+  }
 
   Column(modifier = Modifier.fillMaxSize()) {
     // Top Tabs
@@ -140,6 +180,13 @@ fun WorkspaceScreen(
       )
     }
 
+    if (isNavigatingPage) {
+      LinearProgressIndicator(
+        modifier = Modifier.fillMaxWidth().height(3.dp),
+        color = MaterialTheme.colorScheme.secondary
+      )
+    }
+
     // Tab 0: Live Form WebView
     when (selectedTab) {
       0 -> {
@@ -149,60 +196,181 @@ fun WorkspaceScreen(
             color = MaterialTheme.colorScheme.surfaceVariant,
             modifier = Modifier.fillMaxWidth()
           ) {
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                  onClick = { if (webViewRef?.canGoBack() == true) webViewRef?.goBack() },
-                  enabled = webViewRef?.canGoBack() == true,
-                  modifier = Modifier.size(36.dp)
-                ) {
-                  Icon(Icons.Default.ArrowBack, contentDescription = "Back", modifier = Modifier.size(18.dp))
+            Column {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  IconButton(
+                    onClick = { if (webViewRef?.canGoBack() == true) webViewRef?.goBack() },
+                    enabled = webViewRef?.canGoBack() == true,
+                    modifier = Modifier.size(36.dp)
+                  ) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Browser Back", modifier = Modifier.size(18.dp))
+                  }
+                  IconButton(
+                    onClick = { if (webViewRef?.canGoForward() == true) webViewRef?.goForward() },
+                    enabled = webViewRef?.canGoForward() == true,
+                    modifier = Modifier.size(36.dp)
+                  ) {
+                    Icon(Icons.Default.ArrowForward, contentDescription = "Browser Forward", modifier = Modifier.size(18.dp))
+                  }
+                  IconButton(
+                    onClick = { webViewRef?.reload() },
+                    modifier = Modifier.size(36.dp)
+                  ) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Reload Form", modifier = Modifier.size(18.dp))
+                  }
                 }
-                IconButton(
-                  onClick = { if (webViewRef?.canGoForward() == true) webViewRef?.goForward() },
-                  enabled = webViewRef?.canGoForward() == true,
-                  modifier = Modifier.size(36.dp)
-                ) {
-                  Icon(Icons.Default.ArrowForward, contentDescription = "Forward", modifier = Modifier.size(18.dp))
-                }
-                IconButton(
-                  onClick = { webViewRef?.reload() },
-                  modifier = Modifier.size(36.dp)
-                ) {
-                  Icon(Icons.Default.Refresh, contentDescription = "Reload", modifier = Modifier.size(18.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                  // Scan questions button
+                  Button(
+                    onClick = {
+                      webViewRef?.evaluateJavascript(GoogleFormsBridge.EXTRACTION_SCRIPT, null)
+                      Toast.makeText(context, "Scanning questions from active page...", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.height(34.dp).testTag("scan_dom_btn")
+                  ) {
+                    Icon(Icons.Default.DocumentScanner, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Scan Page", style = MaterialTheme.typography.labelSmall)
+                  }
+
+                  // Open externally in Chrome for SSO / Org auth
+                  IconButton(
+                    onClick = {
+                      val intent = Intent(Intent.ACTION_VIEW, Uri.parse(formUrl))
+                      context.startActivity(intent)
+                    },
+                    modifier = Modifier.size(36.dp).testTag("open_chrome_btn")
+                  ) {
+                    Icon(Icons.Default.OpenInBrowser, contentDescription = "Open in Chrome", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                  }
                 }
               }
 
-              Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                // Scan questions button
-                Button(
-                  onClick = {
-                    webViewRef?.evaluateJavascript(GoogleFormsBridge.EXTRACTION_SCRIPT, null)
-                    Toast.makeText(context, "Scanning questions from form...", Toast.LENGTH_SHORT).show()
-                  },
-                  colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                  modifier = Modifier.height(34.dp).testTag("scan_dom_btn")
+              // Multi-Page Form Controller Bar
+              Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth().testTag("webview_page_nav_bar")
+              ) {
+                Row(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
                 ) {
-                  Icon(Icons.Default.DocumentScanner, contentDescription = null, modifier = Modifier.size(16.dp))
-                  Spacer(modifier = Modifier.width(4.dp))
-                  Text("Scan", style = MaterialTheme.typography.labelSmall)
-                }
+                  // Page Status Badge
+                  Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Surface(
+                      color = MaterialTheme.colorScheme.primaryContainer,
+                      shape = RoundedCornerShape(8.dp)
+                    ) {
+                      Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                      ) {
+                        Icon(
+                          Icons.Default.Layers,
+                          contentDescription = null,
+                          modifier = Modifier.size(14.dp),
+                          tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                          text = pageState.pageIndicatorText,
+                          style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                          color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                      }
+                    }
 
-                // Open externally in Chrome for SSO / Org auth
-                IconButton(
-                  onClick = {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(formUrl))
-                    context.startActivity(intent)
-                  },
-                  modifier = Modifier.size(36.dp).testTag("open_chrome_btn")
+                    if (pageState.sectionTitle.isNotBlank()) {
+                      Spacer(modifier = Modifier.width(8.dp))
+                      Text(
+                        text = pageState.sectionTitle,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        maxLines = 1,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+                  }
+
+                  // Page Navigation Controls
+                  Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Back page button
+                    OutlinedButton(
+                      onClick = { handlePrevPage() },
+                      enabled = (pageState.hasPrevPage || pageState.currentPage > 1) && !isNavigatingPage,
+                      modifier = Modifier.height(34.dp).testTag("nav_prev_page_btn")
+                    ) {
+                      Icon(Icons.Default.ArrowBack, contentDescription = "Previous Section", modifier = Modifier.size(14.dp))
+                      Spacer(modifier = Modifier.width(2.dp))
+                      Text("Back", style = MaterialTheme.typography.labelSmall)
+                    }
+
+                    // Next page button
+                    if (pageState.hasNextPage || (!pageState.isSubmitPage && pageState.totalPages > 1)) {
+                      Button(
+                        onClick = { handleNextPage() },
+                        enabled = !isNavigatingPage,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.height(34.dp).testTag("nav_next_page_btn")
+                      ) {
+                        Text("Next", style = MaterialTheme.typography.labelSmall)
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(Icons.Default.ArrowForward, contentDescription = "Next Section", modifier = Modifier.size(14.dp))
+                      }
+                    }
+
+                    // Auto-Fill & Next
+                    if (pageState.hasNextPage) {
+                      FilledTonalButton(
+                        onClick = { handleAutoFillAndNext() },
+                        enabled = !isNavigatingPage && questions.isNotEmpty(),
+                        modifier = Modifier.height(34.dp).testTag("autofill_and_next_btn")
+                      ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Fill & Next", style = MaterialTheme.typography.labelSmall)
+                      }
+                    }
+                  }
+                }
+              }
+
+              // Optional Navigation message
+              if (pageNavigationMessage != null) {
+                Surface(
+                  color = MaterialTheme.colorScheme.secondaryContainer,
+                  modifier = Modifier.fillMaxWidth()
                 ) {
-                  Icon(Icons.Default.OpenInBrowser, contentDescription = "Open in Chrome", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                  Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Text(
+                      text = pageNavigationMessage ?: "",
+                      style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                      color = MaterialTheme.colorScheme.onSecondaryContainer,
+                      modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                      onClick = { viewModel.clearNavigationMessage() },
+                      modifier = Modifier.size(24.dp)
+                    ) {
+                      Icon(Icons.Default.Close, contentDescription = "Dismiss", modifier = Modifier.size(14.dp))
+                    }
+                  }
                 }
               }
             }
@@ -228,16 +396,21 @@ fun WorkspaceScreen(
                   // JavaScript Interface Bridge
                   addJavascriptInterface(
                     GoogleFormsBridge(
-                      onQuestionsExtracted = { title, extracted ->
+                      onQuestionsExtracted = { title, newPageState, extracted ->
                         post {
-                          viewModel.onQuestionsExtractedFromWeb(title, extracted)
-                          Toast.makeText(ctx, "Extracted ${extracted.size} questions!", Toast.LENGTH_SHORT).show()
+                          viewModel.onQuestionsExtractedFromWeb(title, newPageState, extracted)
                         }
                       },
                       onFillReport = { success, missed, msg ->
                         post {
                           viewModel.onFillReportReceived(success, missed, msg)
                           Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+                        }
+                      },
+                      onNavigationResult = { action, success, msg ->
+                        post {
+                          viewModel.onNavigationResult(action, success, msg)
+                          Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
                         }
                       }
                     ),
@@ -248,7 +421,8 @@ fun WorkspaceScreen(
                     override fun onPageFinished(view: WebView?, url: String?) {
                       super.onPageFinished(view, url)
                       isWebLoading = false
-                      // Inject DOM extraction script on page finish
+                      // Inject DOM extraction & watcher script on page finish
+                      view?.evaluateJavascript(GoogleFormsBridge.WATCHER_SCRIPT, null)
                       view?.evaluateJavascript(GoogleFormsBridge.EXTRACTION_SCRIPT, null)
                     }
 
@@ -283,7 +457,118 @@ fun WorkspaceScreen(
       // Tab 1: AI Answers
       1 -> {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-          Spacer(modifier = Modifier.height(12.dp))
+          Spacer(modifier = Modifier.height(10.dp))
+
+          // Multi-Page Status & Auto-AI Navigator Banner
+          Card(
+            modifier = Modifier.fillMaxWidth().testTag("ai_answers_page_banner"),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+          ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Icon(
+                    Icons.Default.Layers,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                  )
+                  Spacer(modifier = Modifier.width(6.dp))
+                  Text(
+                    text = pageState.pageIndicatorText,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                  )
+                }
+
+                // Auto-AI follow switch chip
+                FilterChip(
+                  selected = autoAiOnPageChange,
+                  onClick = { viewModel.setAutoAiOnPageChange(!autoAiOnPageChange) },
+                  label = {
+                    Text(
+                      if (autoAiOnPageChange) "Auto-AI On" else "Auto-AI Off",
+                      style = MaterialTheme.typography.labelSmall
+                    )
+                  },
+                  leadingIcon = {
+                    Icon(
+                      Icons.Default.AutoAwesome,
+                      contentDescription = null,
+                      modifier = Modifier.size(14.dp)
+                    )
+                  },
+                  colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
+                  ),
+                  modifier = Modifier.testTag("auto_ai_toggle_chip")
+                )
+              }
+
+              if (pageState.sectionTitle.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                  text = "Section: ${pageState.sectionTitle}",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+
+              Spacer(modifier = Modifier.height(8.dp))
+
+              // Page navigation buttons inside AI Answers tab
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                  OutlinedButton(
+                    onClick = { handlePrevPage() },
+                    enabled = (pageState.hasPrevPage || pageState.currentPage > 1) && !isNavigatingPage,
+                    modifier = Modifier.height(34.dp).testTag("ai_page_prev_btn")
+                  ) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Prev Page", style = MaterialTheme.typography.labelSmall)
+                  }
+
+                  if (pageState.hasNextPage || (!pageState.isSubmitPage && pageState.totalPages > 1)) {
+                    Button(
+                      onClick = { handleNextPage() },
+                      enabled = !isNavigatingPage,
+                      modifier = Modifier.height(34.dp).testTag("ai_page_next_btn")
+                    ) {
+                      Text("Next Page", style = MaterialTheme.typography.labelSmall)
+                      Spacer(modifier = Modifier.width(4.dp))
+                      Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(14.dp))
+                    }
+                  }
+                }
+
+                if (pageState.hasNextPage) {
+                  FilledTonalButton(
+                    onClick = { handleAutoFillAndNext() },
+                    enabled = !isNavigatingPage && questions.isNotEmpty(),
+                    modifier = Modifier.height(34.dp).testTag("ai_autofill_next_btn")
+                  ) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Fill & Next", style = MaterialTheme.typography.labelSmall)
+                  }
+                }
+              }
+            }
+          }
+
+          Spacer(modifier = Modifier.height(10.dp))
 
           // Workspace Header Action Bar
           Card(
@@ -304,7 +589,7 @@ fun WorkspaceScreen(
                     color = MaterialTheme.colorScheme.onSurface
                   )
                   Text(
-                    text = "${questions.size} questions detected",
+                    text = "${questions.size} questions on this page",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                   )
@@ -347,7 +632,7 @@ fun WorkspaceScreen(
             }
           }
 
-          Spacer(modifier = Modifier.height(12.dp))
+          Spacer(modifier = Modifier.height(10.dp))
 
           if (questions.isEmpty()) {
             Box(
@@ -360,7 +645,7 @@ fun WorkspaceScreen(
               ) {
                 Icon(Icons.Default.DocumentScanner, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
                 Text("No questions loaded yet", style = MaterialTheme.typography.titleMedium)
-                Text("Open a form in the Form Web View tab or try the demo form.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Open a form in the Form Web View tab or try the multi-page demo form.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(
                   onClick = { viewModel.loadSampleDemoForm() },
                   colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
@@ -408,11 +693,32 @@ fun WorkspaceScreen(
               colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
               Column(modifier = Modifier.padding(16.dp)) {
-                Text("Form Review Summary", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.SpaceBetween,
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Text(
+                    text = "Form Review Summary",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                  )
+                  Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(6.dp)
+                  ) {
+                    Text(
+                      text = pageState.pageIndicatorText,
+                      style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                      color = MaterialTheme.colorScheme.onPrimaryContainer,
+                      modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                  }
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val pct = if (questions.isNotEmpty()) (answeredCount * 100 / questions.size) else 0
-                Text("$answeredCount / ${questions.size} Questions Answered ($pct%)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                Text("$answeredCount / ${questions.size} Questions on this page answered ($pct%)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(6.dp))
                 LinearProgressIndicator(
                   progress = { if (questions.isNotEmpty()) answeredCount.toFloat() / questions.size else 0f },
@@ -480,16 +786,45 @@ fun WorkspaceScreen(
               ) {
                 Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Auto-Fill Answers Into Form", fontWeight = FontWeight.Bold)
+                Text("Auto-Fill Answers for ${pageState.pageIndicatorText}", fontWeight = FontWeight.Bold)
               }
 
-              // 2. Copy All Answers
+              // 2. Auto-Fill & Advance to Next Page
+              if (pageState.hasNextPage) {
+                Button(
+                  onClick = {
+                    handleAutoFillAndNext()
+                    viewModel.setWorkspaceTab(0)
+                  },
+                  modifier = Modifier.fillMaxWidth().height(48.dp).testTag("autofill_and_advance_btn"),
+                  colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                ) {
+                  Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(20.dp))
+                  Spacer(modifier = Modifier.width(8.dp))
+                  Text("Auto-Fill & Advance to Next Page ▶", fontWeight = FontWeight.Bold)
+                }
+              }
+
+              // 3. Return to Previous Page
+              if (pageState.hasPrevPage || pageState.currentPage > 1) {
+                OutlinedButton(
+                  onClick = { handlePrevPage() },
+                  modifier = Modifier.fillMaxWidth().height(44.dp).testTag("review_prev_page_btn")
+                ) {
+                  Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                  Spacer(modifier = Modifier.width(8.dp))
+                  Text("◀ Return to Previous Page")
+                }
+              }
+
+              // 4. Copy All Answers
               OutlinedButton(
                 onClick = {
                   val formatted = buildString {
                     appendLine("=== FormPilot AI Generated Answers ===")
                     appendLine("Form: $formTitle")
                     appendLine("URL: $formUrl")
+                    appendLine("Section: ${pageState.pageIndicatorText}")
                     appendLine("=====================================")
                     questions.forEach { q ->
                       appendLine()
@@ -509,7 +844,7 @@ fun WorkspaceScreen(
                 Text("Copy All Answers Formatted")
               }
 
-              // 3. AI Consistency & Conflict Checker
+              // 5. AI Consistency & Conflict Checker
               OutlinedButton(
                 onClick = {
                   viewModel.runConsistencyCheck()
@@ -557,13 +892,17 @@ fun WorkspaceScreen(
             ) {
               Column(modifier = Modifier.padding(14.dp)) {
                 Text(
-                  text = "Manual Submission Notice",
+                  text = if (pageState.isSubmitPage) "Final Page — Ready for Review & Submission" else "Manual Submission Notice",
                   style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                   color = Color(0xFF38BDF8)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                  text = "FormPilot AI will assist you by inserting and formatting answers. For your security and compliance with Google's policies, you must review every field and click the form's native 'Submit' button yourself.",
+                  text = if (pageState.isSubmitPage) {
+                    "You have reached the final section of this Google Form! FormPilot has assisted in generating and auto-filling your responses. Please verify your answers on this page in the Form Web View tab and manually click Google's 'Submit' button to complete your response."
+                  } else {
+                    "FormPilot AI assists you across multi-page forms by inserting and formatting answers. For your security and compliance with Google's policies, you must review every field and click the form's native 'Submit' button yourself on the final page."
+                  },
                   style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
                   color = Color(0xFF94A3B8)
                 )

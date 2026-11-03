@@ -57,6 +57,7 @@ data class FormQuestion(
   var id: String = "",
   var formId: String = "",
   var questionIndex: Int = 0,
+  var pageIndex: Int = 1,
   var questionText: String = "",
   var questionType: String = QuestionType.SHORT_ANSWER.name,
   var isRequired: Boolean = false,
@@ -83,6 +84,16 @@ data class FormQuestion(
     ConfidenceLevel.MEDIUM
   }
 }
+
+data class FormPageState(
+  val currentPage: Int = 1,
+  val totalPages: Int = 1,
+  val pageIndicatorText: String = "Page 1 of 1",
+  val hasNextPage: Boolean = false,
+  val hasPrevPage: Boolean = false,
+  val isSubmitPage: Boolean = false,
+  val sectionTitle: String = ""
+)
 
 @IgnoreExtraProperties
 data class FormSession(

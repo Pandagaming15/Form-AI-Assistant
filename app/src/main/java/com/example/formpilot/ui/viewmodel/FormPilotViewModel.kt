@@ -61,6 +61,33 @@ class FormPilotViewModel(application: Application) : AndroidViewModel(applicatio
   private val _questions = MutableStateFlow<List<FormQuestion>>(emptyList())
   val questions: StateFlow<List<FormQuestion>> = _questions.asStateFlow()
 
+  // Multi-Page Form State & Navigation
+  private val _pageState = MutableStateFlow(
+    com.example.formpilot.model.FormPageState(
+      currentPage = 1,
+      totalPages = 2,
+      pageIndicatorText = "Page 1 of 2",
+      hasNextPage = true,
+      hasPrevPage = false,
+      isSubmitPage = false,
+      sectionTitle = "Personal & Background"
+    )
+  )
+  val pageState: StateFlow<com.example.formpilot.model.FormPageState> = _pageState.asStateFlow()
+
+  // Cache questions across visited pages
+  private val _pageQuestionsMap = mutableMapOf<Int, List<FormQuestion>>()
+
+  // Auto AI Generation on page navigation: AI automatically analyzes and generates answers when user navigates
+  private val _autoAiOnPageChange = MutableStateFlow(true)
+  val autoAiOnPageChange: StateFlow<Boolean> = _autoAiOnPageChange.asStateFlow()
+
+  private val _isNavigatingPage = MutableStateFlow(false)
+  val isNavigatingPage: StateFlow<Boolean> = _isNavigatingPage.asStateFlow()
+
+  private val _pageNavigationMessage = MutableStateFlow<String?>(null)
+  val pageNavigationMessage: StateFlow<String?> = _pageNavigationMessage.asStateFlow()
+
   // AI Configuration
   private val _selectedMode = MutableStateFlow(AnswerMode.NATURAL)
   val selectedMode: StateFlow<AnswerMode> = _selectedMode.asStateFlow()
@@ -217,15 +244,26 @@ class FormPilotViewModel(application: Application) : AndroidViewModel(applicatio
     _formUrl.value = GoogleFormsBridge.normalizeFormUrl(url)
   }
 
-  // Load a rich sample Google Form with all standard question types
+  // Load a rich sample Google Form with multi-page structure
   fun loadSampleDemoForm() {
     _currentSessionId.value = UUID.randomUUID().toString()
     _formTitle.value = "Tech Conference & Internship Survey 2026"
     _formUrl.value = "https://docs.google.com/forms/d/e/1FAIpQLSc-sample/viewform"
-    _questions.value = listOf(
+    _pageState.value = com.example.formpilot.model.FormPageState(
+      currentPage = 1,
+      totalPages = 2,
+      pageIndicatorText = "Page 1 of 2",
+      hasNextPage = true,
+      hasPrevPage = false,
+      isSubmitPage = false,
+      sectionTitle = "Personal & Academic Information"
+    )
+
+    val page1Questions = listOf(
       FormQuestion(
         id = "demo_1",
         questionIndex = 0,
+        pageIndex = 1,
         questionText = "Full Name",
         questionType = QuestionType.SHORT_ANSWER.name,
         isRequired = true,
@@ -236,6 +274,7 @@ class FormPilotViewModel(application: Application) : AndroidViewModel(applicatio
       FormQuestion(
         id = "demo_2",
         questionIndex = 1,
+        pageIndex = 1,
         questionText = "School or Organization",
         questionType = QuestionType.SHORT_ANSWER.name,
         isRequired = true,
@@ -246,6 +285,7 @@ class FormPilotViewModel(application: Application) : AndroidViewModel(applicatio
       FormQuestion(
         id = "demo_3",
         questionIndex = 2,
+        pageIndex = 1,
         questionText = "What is your primary area of technical interest?",
         questionType = QuestionType.MULTIPLE_CHOICE.name,
         isRequired = true,
@@ -258,6 +298,7 @@ class FormPilotViewModel(application: Application) : AndroidViewModel(applicatio
       FormQuestion(
         id = "demo_4",
         questionIndex = 3,
+        pageIndex = 1,
         questionText = "Which programming languages and platforms do you use regularly?",
         questionType = QuestionType.CHECKBOXES.name,
         isRequired = false,
@@ -266,10 +307,21 @@ class FormPilotViewModel(application: Application) : AndroidViewModel(applicatio
         selectedChoices = listOf("Kotlin", "Python", "TypeScript / JavaScript"),
         confidence = ConfidenceLevel.HIGH.name,
         reasoning = "Matched from supplied resume notes"
-      ),
+      )
+    )
+    _questions.value = page1Questions
+    _pageQuestionsMap[1] = page1Questions
+    _fillReport.value = null
+    _consistencyReport.value = null
+  }
+
+  // Demo multi-page next
+  fun demoNextPage() {
+    val page2Questions = _pageQuestionsMap[2] ?: listOf(
       FormQuestion(
-        id = "demo_5",
+        id = "demo_p2_1",
         questionIndex = 4,
+        pageIndex = 2,
         questionText = "Please describe a challenging project you built and how you solved unexpected obstacles.",
         questionType = QuestionType.PARAGRAPH.name,
         isRequired = true,
@@ -278,8 +330,9 @@ class FormPilotViewModel(application: Application) : AndroidViewModel(applicatio
         reasoning = "Generated in natural human tone matching project context"
       ),
       FormQuestion(
-        id = "demo_6",
+        id = "demo_p2_2",
         questionIndex = 5,
+        pageIndex = 2,
         questionText = "How would you rate your proficiency with modern Android Jetpack Compose?",
         questionType = QuestionType.LINEAR_SCALE.name,
         isRequired = false,
@@ -290,8 +343,9 @@ class FormPilotViewModel(application: Application) : AndroidViewModel(applicatio
         reasoning = "High proficiency demonstrated in codebase"
       ),
       FormQuestion(
-        id = "demo_7",
+        id = "demo_p2_3",
         questionIndex = 6,
+        pageIndex = 2,
         questionText = "Expected Graduation Date",
         questionType = QuestionType.DATE.name,
         isRequired = false,
@@ -300,18 +354,91 @@ class FormPilotViewModel(application: Application) : AndroidViewModel(applicatio
         reasoning = "Calculated from 3rd-year university standing"
       )
     )
-    _fillReport.value = null
-    _consistencyReport.value = null
+    _pageState.value = com.example.formpilot.model.FormPageState(
+      currentPage = 2,
+      totalPages = 2,
+      pageIndicatorText = "Page 2 of 2 (Final Page)",
+      hasNextPage = false,
+      hasPrevPage = true,
+      isSubmitPage = true,
+      sectionTitle = "Technical Experience & Goals"
+    )
+    _questions.value = page2Questions
+    _pageQuestionsMap[2] = page2Questions
+    _isNavigatingPage.value = false
+    _pageNavigationMessage.value = "Advanced to Page 2: Technical Experience & Goals"
   }
 
-  // Receive questions extracted from Google Forms live WebView DOM
-  fun onQuestionsExtractedFromWeb(title: String, extractedQuestions: List<FormQuestion>) {
+  // Demo multi-page previous
+  fun demoPrevPage() {
+    loadSampleDemoForm()
+    _isNavigatingPage.value = false
+    _pageNavigationMessage.value = "Returned to Page 1: Personal & Academic Information"
+  }
+
+  fun setAutoAiOnPageChange(enabled: Boolean) {
+    _autoAiOnPageChange.value = enabled
+  }
+
+  fun startNavigating() {
+    _isNavigatingPage.value = true
+    _pageNavigationMessage.value = null
+  }
+
+  fun onNavigationResult(action: String, success: Boolean, message: String) {
+    _isNavigatingPage.value = false
+    _pageNavigationMessage.value = message
+  }
+
+  fun clearNavigationMessage() {
+    _pageNavigationMessage.value = null
+  }
+
+  // Receive questions extracted from Google Forms live WebView DOM with page state
+  fun onQuestionsExtractedFromWeb(
+    title: String,
+    newPageState: com.example.formpilot.model.FormPageState,
+    extractedQuestions: List<FormQuestion>
+  ) {
     if (title.isNotBlank()) _formTitle.value = title
+
+    val previousPage = _pageState.value.currentPage
+    val isPageChanged = previousPage != newPageState.currentPage
+    _pageState.value = newPageState
+
     if (extractedQuestions.isNotEmpty()) {
-      _questions.value = extractedQuestions
-      _workspaceTab.value = 1 // Switch to AI Answers tab
+      // Retain previously answered values if the user navigates back and forth between pages
+      val existingForThisPage = _pageQuestionsMap[newPageState.currentPage] ?: emptyList()
+      val merged = extractedQuestions.map { freshQ ->
+        val existing = existingForThisPage.find {
+          it.questionText.trim().equals(freshQ.questionText.trim(), ignoreCase = true) ||
+          it.questionIndex == freshQ.questionIndex
+        }
+        if (existing != null && (existing.suggestedAnswer.isNotBlank() || existing.selectedChoices.isNotEmpty())) {
+          freshQ.copy(
+            suggestedAnswer = existing.suggestedAnswer,
+            selectedChoices = existing.selectedChoices,
+            isLocked = existing.isLocked,
+            isVerified = existing.isVerified,
+            confidence = existing.confidence,
+            reasoning = existing.reasoning
+          )
+        } else {
+          freshQ
+        }
+      }
+
+      _pageQuestionsMap[newPageState.currentPage] = merged
+      _questions.value = merged
       saveCurrentDraftLocally()
+
+      // When the page changes and auto AI is enabled, the AI automatically goes there and generates answers!
+      val needsGeneration = merged.any { it.suggestedAnswer.isBlank() && it.selectedChoices.isEmpty() && !it.isLocked }
+      if (_autoAiOnPageChange.value && needsGeneration) {
+        generateAllAnswers()
+      }
     }
+    _isNavigatingPage.value = false
   }
 
   // Generate answers for all unlocked questions

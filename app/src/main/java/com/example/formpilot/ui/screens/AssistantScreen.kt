@@ -70,6 +70,9 @@ fun AssistantScreen(
   val answerLength by viewModel.answerLength.collectAsState()
   val referenceDocs by viewModel.referenceDocs.collectAsState()
   val isGenerating by viewModel.isGenerating.collectAsState()
+  val formTitle by viewModel.formTitle.collectAsState()
+  val pageState by viewModel.pageState.collectAsState()
+  val questions by viewModel.questions.collectAsState()
 
   var pastedText by remember { mutableStateOf("") }
   var newDocTitle by remember { mutableStateOf("") }
@@ -110,10 +113,46 @@ fun AssistantScreen(
           color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-          text = "Multimodal OCR, custom reasoning, and reference knowledge grounding",
+          text = "Multimodal OCR, multi-page awareness, and reference knowledge grounding",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+      }
+    }
+
+    // Active Form Quick Action Banner
+    if (questions.isNotEmpty()) {
+      item {
+        Card(
+          modifier = Modifier.fillMaxWidth().testTag("assistant_active_form_banner"),
+          shape = RoundedCornerShape(14.dp),
+          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+        ) {
+          Row(
+            modifier = Modifier.padding(14.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = formTitle,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                maxLines = 1
+              )
+              Text(
+                text = "Active: ${pageState.pageIndicatorText} • ${questions.size} questions loaded",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+              )
+            }
+            Button(
+              onClick = onNavigateToWorkspace,
+              modifier = Modifier.height(36.dp)
+            ) {
+              Text("Open Form")
+            }
+          }
+        }
       }
     }
 
