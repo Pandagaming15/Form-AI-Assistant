@@ -70,18 +70,20 @@ jobs:
           echo "Verifying debug.keystore:"
           keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
 
-      - name: Make Gradle wrapper executable and link gradle command
-        run: |
-          chmod +x ./gradlew
-          if ! command -v gradle >/dev/null 2>&1; then
-            echo "Linking gradlew to /usr/local/bin/gradle..."
-            sudo ln -sf "$PWD/gradlew" /usr/local/bin/gradle || true
-          fi
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
 
       - name: Build debug APK
         run: |
-          ./gradlew assembleDebug --stacktrace --no-daemon -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m" -Dorg.gradle.workers.max=2
-
+          ./gradlew assembleDebug \
+            --stacktrace \
+            --no-daemon \
+            -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m" \
+            -Dorg.gradle.workers.max=2
+            
       - name: Verify generated APK
         run: |
           ls -la app/build/outputs/apk/debug/
