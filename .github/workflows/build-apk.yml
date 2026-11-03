@@ -1,3 +1,4 @@
+
 name: Build AI Assistant APK
 
 on:
@@ -29,14 +30,16 @@ jobs:
           packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
 
       - name: Accept Android SDK Licenses
-        run: |
-          yes | sdkmanager --licenses || true
+        run: yes | sdkmanager --licenses || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
           cache-read-only: false
+
+      - name: Verify Gradle installation
+        run: gradle --version
 
       - name: Prepare environment configuration
         run: |
@@ -48,12 +51,10 @@ jobs:
       - name: Restore or generate debug keystore
         run: |
           if [ -f debug.keystore.base64 ]; then
-            echo "Restoring debug.keystore from debug.keystore.base64..."
-            base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || base64 --decode debug.keystore.base64 > debug.keystore 2>/dev/null || true
+            base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
           fi
 
           if [ ! -s debug.keystore ] || ! keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey >/dev/null 2>&1; then
-            echo "Generating fallback debug.keystore..."
             rm -f debug.keystore
             keytool -genkeypair \
               -v \
@@ -67,23 +68,16 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-          echo "Verifying debug.keystore:"
           keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
 
       - name: Build debug APK
         run: |
-          ./gradlew assembleDebug \
+          gradle assembleDebug \
             --stacktrace \
             --no-daemon \
             -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=512m" \
             -Dorg.gradle.workers.max=2
-            
+
       - name: Verify generated APK
         run: |
           ls -la app/build/outputs/apk/debug/
