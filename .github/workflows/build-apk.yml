@@ -41,6 +41,11 @@ jobs:
       - name: Verify Gradle installation
         run: gradle --version
 
+      
+      - name: Get Android SHA-1
+        run: gradle signingReport
+          
+
       - name: Prepare environment configuration
         run: |
           if [ -f .env.example ]; then
